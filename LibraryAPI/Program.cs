@@ -1,6 +1,5 @@
 using LibraryAPI.Data;
 using LibraryAPI.Helpers;
-using LibraryAPI.Models;
 using LibraryAPI.Requests;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -88,7 +87,7 @@ books.MapPut("/{id}", async (long id, [FromBody] BookRequest request, Applicatio
     var validationContext = new ValidationContext(request);
 
     if (!Validator.TryValidateObject(request, validationContext, validationResults, true))
-{
+    {
         var errors = validationResults.ToDictionary(
                     v => v.MemberNames.FirstOrDefault() ?? "Error",
                     v => new string[] { v.ErrorMessage! });
@@ -116,14 +115,14 @@ books.MapPut("/{id}", async (long id, [FromBody] BookRequest request, Applicatio
 });
 
 books.MapDelete("/{id}", async (long id, ApplicationDbContext context) =>
-    {
+{
     var book = await context.Books.FindAsync(id);
     if (book is null) return Results.NotFound();
 
-        context.Books.Remove(book);
-        await context.SaveChangesAsync();
+    context.Books.Remove(book);
+    await context.SaveChangesAsync();
 
-        return Results.NoContent();
+    return Results.NoContent();
 });
 
 authors.MapGet("/", async (ApplicationDbContext context) =>
@@ -212,6 +211,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseStaticFiles();
 app.UseHttpsRedirection();
 
 app.Run();
