@@ -70,9 +70,86 @@ books.MapDelete("/{id}", async (int id, ApplicationDbContext context) =>
         context.Books.Remove(book);
         await context.SaveChangesAsync();
         return Results.NoContent();
+});
+
+authors.MapGet("/", async (ApplicationDbContext context) =>
+{
+    var authors = await context.Authors.AsNoTracking().ToListAsync();
+    return Results.Ok(authors.ToGetAuthorResponses());
+});
+
+authors.MapGet("/{id}", async (long id, ApplicationDbContext context) =>
+{
+    var author = await context.Authors.FindAsync(id);
+
+    if (author is null) return Results.NotFound();
+
+    var authorResponse = author.ToAuthorResponse();
+
+    return Results.Ok(authorResponse);
+});
+
+authors.MapPost("/", async ([FromBody] AuthorRequest request, ApplicationDbContext context) =>
+{
+    var validationResults = new List<ValidationResult>();
+
+    var validationContext = new ValidationContext(request);
+
+    if (!Validator.TryValidateObject(request, validationContext, validationResults, true))
+    {
+        var errors = validationResults.ToDictionary(
+                    v => v.MemberNames.FirstOrDefault() ?? "Error",
+                    v => new string[] { v.ErrorMessage! });
+
+        return Results.BadRequest(new { Message = "Validation failed", Errors = errors });
     }
 
-    return Results.NotFound();
+    var author = request.ToAuthor();
+
+    context.Authors.Add(author);
+    await context.SaveChangesAsync();
+
+    var authorResponse = author.ToAuthorResponse();
+
+    return Results.Created($"/authors/{authorResponse.Id}", authorResponse);
+});
+
+authors.MapPut("/{id}", async (long id, [FromBody] AuthorRequest request, ApplicationDbContext context) =>
+{
+    var validationResults = new List<ValidationResult>();
+
+    var validationContext = new ValidationContext(request);
+
+    if (!Validator.TryValidateObject(request, validationContext, validationResults, true))
+    {
+        var errors = validationResults.ToDictionary(
+                    v => v.MemberNames.FirstOrDefault() ?? "Error",
+                    v => new string[] { v.ErrorMessage! });
+
+        return Results.BadRequest(new { Message = "Validation failed", Errors = errors });
+    }
+
+    var author = await context.Authors.FindAsync(id);
+
+    if (author is null) return Results.NotFound();
+
+    author.FirstName = request.FirstName;
+    author.LastName = request.LastName;
+
+    await context.SaveChangesAsync();
+
+    return Results.NoContent();
+});
+
+authors.MapDelete("/{id}", async (long id, ApplicationDbContext context) =>
+{
+    var author = await context.Authors.FindAsync(id);
+    if (author is null) return Results.NotFound();
+
+    context.Authors.Remove(author);
+    await context.SaveChangesAsync();
+
+    return Results.NoContent();
 });
 
 // Configure the HTTP request pipeline.
