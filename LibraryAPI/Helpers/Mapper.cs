@@ -6,11 +6,14 @@ namespace LibraryAPI.Helpers;
 
 public static class Mapper
 {
-    public static IEnumerable<GetBooksResponse> ToBooksWithAuthorsResponse(this IEnumerable<Book> books)
+    public static IEnumerable<GetBookResponse> ToGetBookResponses(this IEnumerable<Book> books)
     {
-        return books.Select(b => new GetBooksResponse(
-            b.Id, b.Title, b.Year,
-            new GetAuthorResponse(b.Author.Id, b.Author.FirstName, b.Author.LastName)));
+        return books.Select(b => b.ToBookResponse());
+    }
+
+    public static IEnumerable<GetAuthorResponse> ToGetAuthorResponses(this IEnumerable<Author> authors)
+    {
+        return authors.Select(a => a.ToAuthorResponse());
     }
 
     public static Book ToBook(this BookRequest request)
@@ -21,5 +24,26 @@ public static class Mapper
             Title = request.Title,
             Year = request.Year
         };
+    }
+
+    public static GetBookResponse ToBookResponse(this Book book)
+    {
+        return new GetBookResponse(
+            book.Id, book.Title, book.Year,
+            new GetAuthorResponse(book.Author.Id, book.Author.FirstName, book.Author.LastName));
+    }
+
+    public static Author ToAuthor(this AuthorRequest request)
+    {
+        return new Author
+        {
+            FirstName = request.FirstName,
+            LastName = request.LastName,
+        };
+    }
+
+    public static GetAuthorResponse ToAuthorResponse(this Author author)
+    {
+        return new GetAuthorResponse(author.Id, author.FirstName, author.LastName);
     }
 }
