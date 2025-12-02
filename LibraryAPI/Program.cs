@@ -1,6 +1,8 @@
 using LibraryAPI.Data;
 using LibraryAPI.Helpers;
 using LibraryAPI.Requests;
+using LibraryAPI.Responses;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
@@ -19,7 +21,8 @@ var app = builder.Build();
 var books = app.MapGroup("/books");
 var authors = app.MapGroup("/authors");
 
-books.MapGet("/", async ([FromQuery] long? authorId, CancellationToken token, ApplicationDbContext context) =>
+books.MapGet("/", async Task<Ok<IEnumerable<GetBookResponse>>> (
+    [FromQuery] long? authorId, CancellationToken token, ApplicationDbContext context) =>
 {
     var query = context.Books.Include(b => b.Author).AsNoTracking();
 
@@ -30,21 +33,23 @@ books.MapGet("/", async ([FromQuery] long? authorId, CancellationToken token, Ap
 
     var books = await query.ToListAsync(token);
 
-    return Results.Ok(books.ToGetBookResponses());
+    return TypedResults.Ok(books.ToGetBookResponses());
 });
 
-books.MapGet("/{id}", async (long id, CancellationToken token, ApplicationDbContext context) =>
+books.MapGet("/{id}", async Task<Results<Ok<GetBookResponse>, NotFound>> (
+    long id, CancellationToken token, ApplicationDbContext context) =>
 {
     var book = await context.Books.Include(b => b.Author).AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, token);
 
-    if (book is null) return Results.NotFound();
+    if (book is null) return TypedResults.NotFound();
 
     var bookResponse = book.ToBookResponse();
 
-    return Results.Ok(bookResponse);
+    return TypedResults.Ok(bookResponse);
 });
 
-books.MapPost("/", async ([FromBody] BookRequest request, CancellationToken token, ApplicationDbContext context) =>
+books.MapPost("/", async Task<Results<BadRequest<ErrorResponse>, Created<GetBookResponse>>> (
+    [FromBody] BookRequest request, CancellationToken token, ApplicationDbContext context) =>
 {
     var validationResults = new List<ValidationResult>();
 
@@ -56,13 +61,13 @@ books.MapPost("/", async ([FromBody] BookRequest request, CancellationToken toke
                     v => v.MemberNames.FirstOrDefault() ?? "Error",
                     v => new string[] { v.ErrorMessage! });
 
-        return Results.BadRequest(new { Message = "Validation failed", Errors = errors });
+        return TypedResults.BadRequest(new ErrorResponse("Validation failed", errors));
     }
 
     var authorExists = await context.Authors.AnyAsync(a => a.Id == request.AuthorId, token);
     if (!authorExists)
     {
-        return Results.BadRequest(new { Message = $"Author with Id {request.AuthorId} does not exist." });
+        return TypedResults.BadRequest(new ErrorResponse($"Author with Id {request.AuthorId} does not exist."));
     }
 
     var book = request.ToBook();
@@ -77,10 +82,11 @@ books.MapPost("/", async ([FromBody] BookRequest request, CancellationToken toke
 
     var bookResponse = savedBook.ToBookResponse();
 
-    return Results.Created($"/books/{bookResponse.Id}", bookResponse);
+    return TypedResults.Created($"/books/{bookResponse.Id}", bookResponse);
 });
 
-books.MapPut("/{id}", async (long id, [FromBody] BookRequest request, CancellationToken token, ApplicationDbContext context) =>
+books.MapPut("/{id}", async Task<Results<BadRequest<ErrorResponse>, NoContent, NotFound>> (
+    long id, [FromBody] BookRequest request, CancellationToken token, ApplicationDbContext context) =>
 {
     var validationResults = new List<ValidationResult>();
 
@@ -92,17 +98,17 @@ books.MapPut("/{id}", async (long id, [FromBody] BookRequest request, Cancellati
                     v => v.MemberNames.FirstOrDefault() ?? "Error",
                     v => new string[] { v.ErrorMessage! });
 
-        return Results.BadRequest(new { Message = "Validation failed", Errors = errors });
+        return TypedResults.BadRequest(new ErrorResponse("Validation failed", errors));
     }
 
     var book = await context.Books.FindAsync([id], token);
 
-    if (book is null) return Results.NotFound();
+    if (book is null) return TypedResults.NotFound();
 
     var authorExists = await context.Authors.AnyAsync(a => a.Id == request.AuthorId, token);
     if (!authorExists)
     {
-        return Results.BadRequest(new { Message = $"Author with Id {request.AuthorId} does not exist." });
+        return TypedResults.BadRequest(new ErrorResponse($"Author with Id {request.AuthorId} does not exist."));
     }
 
     book.Year = request.Year;
@@ -111,38 +117,41 @@ books.MapPut("/{id}", async (long id, [FromBody] BookRequest request, Cancellati
 
     await context.SaveChangesAsync(token);
 
-    return Results.NoContent();
+    return TypedResults.NoContent();
 });
 
-books.MapDelete("/{id}", async (long id, CancellationToken token, ApplicationDbContext context) =>
+books.MapDelete("/{id}", async Task<Results<NotFound, NoContent>> (long id, CancellationToken token, ApplicationDbContext context) =>
 {
     var book = await context.Books.FindAsync([id], token);
-    if (book is null) return Results.NotFound();
+    if (book is null) return TypedResults.NotFound();
 
     context.Books.Remove(book);
     await context.SaveChangesAsync(token);
 
-    return Results.NoContent();
+    return TypedResults.NoContent();
 });
 
-authors.MapGet("/", async (CancellationToken token, ApplicationDbContext context) =>
+authors.MapGet("/", async Task<Ok<IEnumerable<GetAuthorResponse>>> (
+    CancellationToken token, ApplicationDbContext context) =>
 {
     var authors = await context.Authors.AsNoTracking().ToListAsync(token);
-    return Results.Ok(authors.ToGetAuthorResponses());
+    return TypedResults.Ok(authors.ToGetAuthorResponses());
 });
 
-authors.MapGet("/{id}", async (long id, CancellationToken token, ApplicationDbContext context) =>
+authors.MapGet("/{id}", async Task<Results<NotFound, Ok<GetAuthorResponse>>> (
+    long id, CancellationToken token, ApplicationDbContext context) =>
 {
     var author = await context.Authors.FindAsync([id], token);
 
-    if (author is null) return Results.NotFound();
+    if (author is null) return TypedResults.NotFound();
 
     var authorResponse = author.ToAuthorResponse();
 
-    return Results.Ok(authorResponse);
+    return TypedResults.Ok(authorResponse);
 });
 
-authors.MapPost("/", async ([FromBody] AuthorRequest request, CancellationToken token, ApplicationDbContext context) =>
+authors.MapPost("/", async Task<Results<BadRequest<ErrorResponse>, Created<GetAuthorResponse>>> (
+    [FromBody] AuthorRequest request, CancellationToken token, ApplicationDbContext context) =>
 {
     var validationResults = new List<ValidationResult>();
 
@@ -154,7 +163,7 @@ authors.MapPost("/", async ([FromBody] AuthorRequest request, CancellationToken 
                     v => v.MemberNames.FirstOrDefault() ?? "Error",
                     v => new string[] { v.ErrorMessage! });
 
-        return Results.BadRequest(new { Message = "Validation failed", Errors = errors });
+        return TypedResults.BadRequest(new ErrorResponse("Validation failed", errors));
     }
 
     var author = request.ToAuthor();
@@ -164,10 +173,11 @@ authors.MapPost("/", async ([FromBody] AuthorRequest request, CancellationToken 
 
     var authorResponse = author.ToAuthorResponse();
 
-    return Results.Created($"/authors/{authorResponse.Id}", authorResponse);
+    return TypedResults.Created($"/authors/{authorResponse.Id}", authorResponse);
 });
 
-authors.MapPut("/{id}", async (long id, [FromBody] AuthorRequest request, CancellationToken token, ApplicationDbContext context) =>
+authors.MapPut("/{id}", async Task<Results<BadRequest<ErrorResponse>, NotFound, NoContent>> (
+    long id, [FromBody] AuthorRequest request, CancellationToken token, ApplicationDbContext context) =>
 {
     var validationResults = new List<ValidationResult>();
 
@@ -179,30 +189,31 @@ authors.MapPut("/{id}", async (long id, [FromBody] AuthorRequest request, Cancel
                     v => v.MemberNames.FirstOrDefault() ?? "Error",
                     v => new string[] { v.ErrorMessage! });
 
-        return Results.BadRequest(new { Message = "Validation failed", Errors = errors });
+        return TypedResults.BadRequest(new ErrorResponse("Validation failed", errors));
     }
 
     var author = await context.Authors.FindAsync([id], token);
 
-    if (author is null) return Results.NotFound();
+    if (author is null) return TypedResults.NotFound();
 
     author.FirstName = request.FirstName;
     author.LastName = request.LastName;
 
     await context.SaveChangesAsync(token);
 
-    return Results.NoContent();
+    return TypedResults.NoContent();
 });
 
-authors.MapDelete("/{id}", async (long id, CancellationToken token, ApplicationDbContext context) =>
+authors.MapDelete("/{id}", async Task<Results<NotFound, NoContent>> (
+    long id, CancellationToken token, ApplicationDbContext context) =>
 {
     var author = await context.Authors.FindAsync([id], token);
-    if (author is null) return Results.NotFound();
+    if (author is null) return TypedResults.NotFound();
 
     context.Authors.Remove(author);
     await context.SaveChangesAsync(token);
 
-    return Results.NoContent();
+    return TypedResults.NoContent();
 });
 
 // Configure the HTTP request pipeline.
